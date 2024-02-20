@@ -9,8 +9,9 @@ class Graph:
 		self._paths = []
 		
 	def addNode(self, node):
-		r'''Function to add an edge to graph.'''
-		self.nodes.append(node)
+		r'''Function to add an edge to graph. It avoids add repeted nodes.'''
+		if node not in self.nodes:
+			self.nodes.append(node)
 		
 	def addEdge(self, u, v):
 		r'''Function to add an edge to graph.'''
