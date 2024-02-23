@@ -1,6 +1,5 @@
 import numpy as np
 import pm4py
-from Graph import Graph
 from gensim.models.doc2vec import Doc2Vec, TaggedDocument
 
 class PetriNet2Vec():
@@ -10,6 +9,7 @@ class PetriNet2Vec():
         - embedding_dim (int): The size of the embedding dimension.
         - negative_sampling (int, optional): Similar to the word2vec approach, specifies the number of negative samples to be used during training.
         - seed (int, optional): Random seed. In Python 3, reproducibility between launches also requires setting the PYTHONHASHSEED environment variable.
+        - black_transitions (bool, optional): If it set 'True' all black boxes transitions will be represented by the word 'None'.
         - workers (int, optional): The number of parallel jobs to launch during training.
 
     Methods:
@@ -57,27 +57,27 @@ class PetriNet2Vec():
 
     def __init__(self, 
                  embedding_dim:int=2,
-                 workers:int=4, 
-                 negative_sampling:int=5, 
+                 negative:int=5,
+                 workers:int=4,
+                 black_transitions:bool=False,
                  seed:int=None):
         
-        self.embedding_dim = embedding_dim          # The size of the embedding dimension.
-        self.context_window = 1                     # The number of tasks allowed in the context. For instance, if context_window=1, task i+1 is considered when predicting task_i. We set it to 1 aming to capture the relation between the current task and the following task.
-        self.workers = workers                      # The number of parallel jobs during training.
-        self.min_count = 1                          # The minimum frequency a task must have to be included in the tokens dictionary.
-        self.seed = seed                            # The seed for reproducibility.
-        self.negative_sampling = negative_sampling  # The number of negative samples used during training.
-        self._fitted = False                        # To keep track of were the model was fitted at least one time
-        self._task_keys = {}                        # Dictionary with taks keys usefull to query taks embeddings
-        self._net_keys = {}                         # Dictionary with petri Nets keys usefull to query net embeddings
+        self.embedding_dim = embedding_dim # The size of the embedding dimension.
+        self.workers = workers             # The number of parallel jobs during training.
+        self.negative = negative           # The number of negative samples used during training. 
+        self.seed = seed                   # The seed for reproducibility.
+        self._fitted = False               # To keep track of were the model was fitted at least one time
+        self._task_keys = {}               # Dictionary with taks keys usefull to query taks embeddings
+        self._net_keys = {}                # Dictionary with petri Nets keys usefull to query net embeddings
+        self.black_transitions = black_transitions # Whether to use the word "None" for all black box transitions.
 
         self.model = Doc2Vec(vector_size = self.embedding_dim, 
-                             window = self.context_window,
-                             min_count = self.min_count, 
-                             negative = self.negative_sampling, 
+                             window = 1, # The number of tasks allowed in the context. For instance, if context_window=1, task i+1 is considered when predicting task_i. We set it to 1 aming to capture the relation between the current task and the following task.
+                             min_count = 1, # The minimum frequency a task must have to be included in the tokens dictionary.
+                             negative = self.negative, 
                              workers = self.workers,
-                             compute_loss = True,
                              seed = self.seed,
+                             #sample = 0.5,
                              dm = 1) # Defines the training algorithm. Recommended dm=1, for 'distributed memory' (PV-DM) training. Be aware that dm=0 does not learn task embeddings! 
 
     def __petriNets2docs(self, nets:list) -> list:
@@ -90,13 +90,13 @@ class PetriNet2Vec():
             Processes a list of Petri Nets, extracting sequences of transitions (pairs of transitions) and creates a list of documents where each document is formed by several pairs of tokens. Each token represents the transition from task_i to task_j. For example:
             
             [
-                TaggedDocument(words=['t13', 't20'], tags=['0']),
-                TaggedDocument(words=['t17', 'n20'], tags=['0']),
-                TaggedDocument(words=['t6', 't8'], tags=['1']),
-                TaggedDocument(words=['t6', 't7'], tags=['1']), 
-                TaggedDocument(words=['t9', 't10'], tags=['2']),
-                TaggedDocument(words=['n11', 't12'], tags=['2']),
-                TaggedDocument(words=['n11', 't18'], tags=['2']),
+                TaggedDocument(words=['13', '20'], tags=['0']),
+                TaggedDocument(words=['17', '20'], tags=['0']),
+                TaggedDocument(words=['6', '8'], tags=['1']),
+                TaggedDocument(words=['6', '7'], tags=['1']), 
+                TaggedDocument(words=['9', '10'], tags=['2']),
+                TaggedDocument(words=['11', '12'], tags=['2']),
+                TaggedDocument(words=['11', '18'], tags=['2']),
                 ...
             ]
         """
@@ -107,11 +107,13 @@ class PetriNet2Vec():
             for transition in Transitions:
                 for place in Places:
                     if place.source == transition.target:
-                        left = 'None' if transition.source.label == None else transition.source.label
-                        right = 'None' if place.target.label == None else place.target.label
-                        #left = transition.source.name.split('_')[0] if transition.source.label == None else transition.source.label
-                        #right = place.target.name.split('_')[0] if place.target.label == None else place.target.label
-                        if left != right: # avoid self-loops
+                        if self.black_transitions:
+                            left = 'None' if transition.source.label == None else transition.source.label
+                            right = 'None' if place.target.label == None else place.target.label
+                        else:
+                            left = transition.source.name.split('_')[0] if transition.source.label == None else transition.source.label
+                            right = place.target.name.split('_')[0] if place.target.label == None else place.target.label
+                        if left != right:
                             self._documents.append(TaggedDocument(words=[left, right], tags=[str(i)]))
 
     def fit(self, petriNets:list, epochs:int):
@@ -143,9 +145,6 @@ class PetriNet2Vec():
             # Update embeddings
             self._embeddings = [self.model.docvecs[str(i)] for i in self.model.dv.index_to_key]
         else: 
-            # initialize random weights
-            self.model.init_weights()
-
             # Initial training
             self._documents = []        # Internal storage for processed Petri Nets.
             self._embeddings = []       # Internal storage for generated embeddings.
@@ -218,16 +217,15 @@ class PetriNet2Vec():
         else:
             return self.model.wv[task_key]
 
-    def similarity(self, vec1: np.ndarray, vec2: np.ndarray, metric='cosine') -> float:
+    def similarity(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
         r"""Compute the cosine similarity between two embedding vectors.
 
         Args:
             vec1 (numpy array): The first embedding vector.
             vec2 (numpy array): The second embedding vector.
-            metric (optional): Metric used to calculate simlarity between embeddings. Default 'cosine', alternative 'euclidean'.
 
         Returns:
-            float: The 'cosine' or the 'euclidean' similarity score between the two embeddings.
+            float: The cosine similarity score between the two embeddings.
 
         This method calculates the cosine similarity between two embedding vectors. Cosine similarity is a measure of similarity between two non-zero vectors of an inner product space. It is computed as the dot product of the normalized vectors.
 
@@ -249,10 +247,7 @@ class PetriNet2Vec():
         norm_vec2 = np.linalg.norm(vec2)
         assert norm_vec2 > 0, "Problem: Second embedding vector with zero norm"
         
-        if metric == 'euclidean':
-            return np.linalg.norm(vec1 - vec2)
-        else:
-            return np.dot(vec1/norm_vec1, vec2/norm_vec2)
+        return np.dot(vec1/norm_vec1, vec2/norm_vec2)
 
     def infer_vector(self, net:pm4py.objects.petri_net.obj.PetriNet, epochs:int=None) -> np.array:
         r"""Infer an embedding vector for a new Petri Net using the pre-trained Pnml2Vec model.
@@ -281,10 +276,12 @@ class PetriNet2Vec():
         for transition in Transitions:
             for place in Places:
                 if place.source == transition.target:
-                    left = 'None' if transition.source.label == None else transition.source.label
-                    right = 'None' if place.target.label == None else place.target.label
-                    #left = transition.source.name.split('_')[0] if transition.source.label == None else transition.source.label
-                    #right = place.target.name.split('_')[0] if place.target.label == None else place.target.label
+                    if self.black_transitions:
+                        left = 'None' if transition.source.label == None else transition.source.label
+                        right = 'None' if place.target.label == None else place.target.label
+                    else:
+                        left = transition.source.name.split('_')[0] if transition.source.label == None else transition.source.label
+                        right = place.target.name.split('_')[0] if place.target.label == None else place.target.label
                     if left != right:
                         doc.append(left)
                         doc.append(right)
@@ -352,10 +349,8 @@ class PetriNet2Vec():
             for transition in Transitions:
                 for place in Places:
                     if place.source == transition.target:
-                        left = 'None' if transition.source.label == None else transition.source.label
-                        right = 'None' if place.target.label == None else place.target.label
-                        #left = transition.source.name.split('_')[0] if transition.source.label == None else transition.source.label
-                        #right = place.target.name.split('_')[0] if place.target.label == None else place.target.label
+                        left = '0' if transition.source.label == None else str(transition.source.label.split('t')[-1])
+                        right = '0' if place.target.label == None else str(place.target.label.split('t')[-1])
                         if left != right:
                             new_documents.append(TaggedDocument(words=[left, right], tags=[str(new_examples)]))
 
