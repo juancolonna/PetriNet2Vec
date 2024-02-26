@@ -59,7 +59,7 @@ class PetriNet2Vec():
                  embedding_dim:int=2,
                  negative:int=5,
                  workers:int=4,
-                 black_transitions:bool=False,
+                 black_transitions:bool=True,
                  seed:int=None):
         
         self.embedding_dim = embedding_dim # The size of the embedding dimension.
@@ -70,15 +70,19 @@ class PetriNet2Vec():
         self._task_keys = {}               # Dictionary with taks keys usefull to query taks embeddings
         self._net_keys = {}                # Dictionary with petri Nets keys usefull to query net embeddings
         self.black_transitions = black_transitions # Whether to use the word "None" for all black box transitions.
+        self._embeddings = []       # Internal storage for generated embeddings.
+
 
         self.model = Doc2Vec(vector_size = self.embedding_dim, 
-                             window = 1, # The number of tasks allowed in the context. For instance, if context_window=1, task i+1 is considered when predicting task_i. We set it to 1 aming to capture the relation between the current task and the following task.
+                             window = 2, # The number of tasks allowed in the context. For instance, if context_window=1, task i+1 is considered when predicting task_i. We set it to 1 aming to capture the relation between the current task and the following task.
                              min_count = 1, # The minimum frequency a task must have to be included in the tokens dictionary.
                              negative = self.negative, 
                              workers = self.workers,
                              seed = self.seed,
-                             #sample = 0.5,
                              dm = 1) # Defines the training algorithm. Recommended dm=1, for 'distributed memory' (PV-DM) training. Be aware that dm=0 does not learn task embeddings! 
+        
+        self.model.init_weights() # initialize random weights
+        
 
     def __petriNets2docs(self, nets:list) -> list:
         r"""Private method: Parse a list of Petri Nets (in Pm4py format) into a list of Tagged documents representing pairs of tasks (transitions).
@@ -87,16 +91,16 @@ class PetriNet2Vec():
             nets (list of pm4py.objects.petri_net.obj.PetriNet): A list of Petri Nets using Pm4py format.
 
         Example:
-            Processes a list of Petri Nets, extracting sequences of transitions (pairs of transitions) and creates a list of documents where each document is formed by several pairs of tokens. Each token represents the transition from task_i to task_j. For example:
+            Processes a list of Petri Nets, extracting sequences of transitions (pairs of transitions) and creates a list of documents where each document is formed by several pairs of tokens. 'tags' is the document Id. Each token represents the transition from task_i to task_j. For example:
             
             [
-                TaggedDocument(words=['13', '20'], tags=['0']),
-                TaggedDocument(words=['17', '20'], tags=['0']),
-                TaggedDocument(words=['6', '8'], tags=['1']),
-                TaggedDocument(words=['6', '7'], tags=['1']), 
-                TaggedDocument(words=['9', '10'], tags=['2']),
-                TaggedDocument(words=['11', '12'], tags=['2']),
-                TaggedDocument(words=['11', '18'], tags=['2']),
+                TaggedDocument(words=['t13', 't20'], tags=['0']),
+                TaggedDocument(words=['None', 't20'], tags=['0']),
+                TaggedDocument(words=['t6', 'None'], tags=['1']),
+                TaggedDocument(words=['t6', 't7'], tags=['1']), 
+                TaggedDocument(words=['t9', 't10'], tags=['2']),
+                TaggedDocument(words=['t11', 't12'], tags=['2']),
+                TaggedDocument(words=['None', 't18'], tags=['2']),
                 ...
             ]
         """
@@ -116,6 +120,18 @@ class PetriNet2Vec():
                         if left != right:
                             self._documents.append(TaggedDocument(words=[left, right], tags=[str(i)]))
 
+    def __build_vocabulary(self, petriNets:list):
+            """
+                petriNets (list): A list of Petri Nets using Pm4py format.
+            """
+            self._documents = []        # Internal storage for processed Petri Nets.
+
+            # Convert Petri Nets to documents
+            self.__petriNets2docs(petriNets)
+
+            # Build vocabulary and train the model
+            self.model.build_vocab(corpus_iterable = self._documents, update=False)
+
     def fit(self, petriNets:list, epochs:int):
         r"""Fit a PetriNet2Vec model on a list of Petri Nets in Pm4py format.
 
@@ -134,37 +150,20 @@ class PetriNet2Vec():
             >>> petri_net2vec = PetriNet2Vec(embedding_dim=100)
             >>> petri_net2vec.fit(petri_nets, epochs=100)
         """      
-        if self._fitted:
-            # Continue training for more epochs and update the model embeddings
-            self.model.train(corpus_iterable = self._documents,
-                             epochs = epochs,
-                             total_examples = self.model.corpus_count,
-                             compute_loss=True)
-            self.model.update_weights()
-
-            # Update embeddings
-            self._embeddings = [self.model.docvecs[str(i)] for i in self.model.dv.index_to_key]
-        else: 
-            # Initial training
-            self._documents = []        # Internal storage for processed Petri Nets.
-            self._embeddings = []       # Internal storage for generated embeddings.
-
-            # Convert Petri Nets to documents
-            self.__petriNets2docs(petriNets)
-
-            # Build vocabulary and train the model
-            self.model.build_vocab(corpus_iterable = self._documents, update=False)
-            self.model.train(corpus_iterable = self._documents,
-                             epochs = epochs,
-                             total_examples = self.model.corpus_count,
-                             compute_loss=True)
-            self.model.update_weights()
-
-            # Update embeddings and set the model as fitted
-            self._embeddings = [self.model.docvecs[str(i)] for i in self.model.dv.index_to_key]
-            self._fitted = True
+        if not self._fitted:
+            self.__build_vocabulary(petriNets)
             self._task_keys = self.model.wv.key_to_index
             self._net_keys = self.model.dv.key_to_index
+
+        self.model.train(corpus_iterable = self._documents,
+                         epochs = epochs,
+                         total_examples = self.model.corpus_count,
+                         compute_loss=True)
+        self.model.update_weights()
+
+        # Update embeddings and set the model as fitted
+        self._embeddings = [self.model.docvecs[str(i)] for i in self.model.dv.index_to_key]
+        self._fitted = True
 
     def get_net_embeddings(self, petriNet_key:str=None) -> np.array:
         r"""Retrieve the embeddings of Petri Nets generated by the fitted PetriNet2Vec model.
@@ -312,14 +311,19 @@ class PetriNet2Vec():
             >>> model = PetriNet2Vec()
             >>> model.load_model_from("pnml2vec.model")
         """
+        
+        #self.__build_vocabulary(petriNets)
+
         self.model = Doc2Vec.load(name)
         self.embedding_dim = self.model.vector_size
-        self.context_window = self.model.window
-        self.min_count = self.model.min_count 
-        self.negative_sampling = self.model.negative
+        self.negative = self.model.negative
         self.workers = self.model.workers
         self.seed = self.model.seed
-        self.fitted = True
+        self._fitted = False # importante to set it to False here!
+        self._task_keys = self.model.wv.key_to_index
+        self._net_keys = self.model.dv.key_to_index
+
+        #self.black_transitions = black_transitions # Whether to use the word "None" for all black box transitions.
 
     def fine_tune(self, petriNets:list, epochs:int):
         r"""Fine-tune a PetriNet2Vec model on a new list of Petri Nets in Pm4py format. The model must be fitted before calling this method.
@@ -349,8 +353,12 @@ class PetriNet2Vec():
             for transition in Transitions:
                 for place in Places:
                     if place.source == transition.target:
-                        left = '0' if transition.source.label == None else str(transition.source.label.split('t')[-1])
-                        right = '0' if place.target.label == None else str(place.target.label.split('t')[-1])
+                        if self.black_transitions:
+                            left = 'None' if transition.source.label == None else transition.source.label
+                            right = 'None' if place.target.label == None else place.target.label
+                        else:
+                            left = transition.source.name.split('_')[0] if transition.source.label == None else transition.source.label
+                            right = place.target.name.split('_')[0] if place.target.label == None else place.target.label
                         if left != right:
                             new_documents.append(TaggedDocument(words=[left, right], tags=[str(new_examples)]))
 
