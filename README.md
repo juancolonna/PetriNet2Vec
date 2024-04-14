@@ -32,7 +32,7 @@ similarity analysis and process mining.
 
 -   `sudo apt-get install graphviz`
 
--   `pip install -i <https://test.pypi.org/simple/> PetriNet2Vec`
+-   `pip install -i https://test.pypi.org/simple/ PetriNet2Vec`
 
 ## How to use PetriNet2Vec
 ``` python
