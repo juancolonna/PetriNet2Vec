@@ -69,7 +69,7 @@ for model in models:
     petriNets_fm.append(fm)
 ```
 
-# Vector Embedding Learning
+Vector Embedding Learning
 ``` python
 pnml2vec = PetriNet2Vec(embedding_dim=8, # '8' minimum acceptable number of embedding dimensions
                         workers=8)       # number of paraller works
@@ -78,7 +78,7 @@ pnml2vec.fit(petriNets, epochs=1000)
 pnml2vec.save_model("trained_model")
 ```
 
-# Getting embedding vectors
+Getting embedding vectors
 ``` python
 embeddings_vectors = pnml2vec.get_net_embeddings()
 # showing the fisrt Petri net and its embedding
