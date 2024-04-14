@@ -20,19 +20,19 @@ similarity analysis and process mining.
 
 ### Dependecies (recomended order):
 
--   sudo apt install libopenblas-dev
+-   `sudo apt install libopenblas-dev`
 
--   pip install scipy==1.11.1
+-   `pip install scipy==1.11.1`
 
--   pip install gensim
+-   `pip install gensim`
 
--   pip install pm4py
+-   `pip install pm4py`
 
--   pip install requests
+-   `pip install requests`
 
--   sudo apt-get install graphviz
+-   `sudo apt-get install graphviz`
 
--   pip install -i <https://test.pypi.org/simple/> PetriNet2Vec
+-   `pip install -i <https://test.pypi.org/simple/> PetriNet2Vec`
 
 ## How to use PetriNet2Vec
 ``` python
@@ -50,7 +50,7 @@ Download dataset for training
 
 ``` python
 # The PDC 2023 folder contains the dataset used in the Process Discovery Contest of 2023.
-# The data set contains 96 models stored as .pnml files.
+# The dataset contains 96 models stored as .pnml files.
 r = requests.get('https://data.4tu.nl/file/afd6f608-469e-48f9-977d-875b45840d39/e8eaeb15-b503-443c-8666-43f3c5261eb2')
 z = zipfile.ZipFile(io.BytesIO(r.content))
 z.extractall("Models")
