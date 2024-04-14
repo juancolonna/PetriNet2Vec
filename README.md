@@ -2,21 +2,11 @@
 
 ### Summary
 
-Embedding vectors are numerical representations of objects or concepts
-in a continuous vector space. They are commonly used in machine learning
-tasks because they capture semantic relationships between entities. In
-process mining, embeddings can provide a powerful means of representing
-complex process structures and relationships within process models. For
-example, we can embed individual activities, control flow structures, or
-entire process models in vector representations. This enables
-sophisticated similarity analysis, the identification of analogous
-patterns, and the application of predictive modeling techniques that
-would be difficult to achieve with traditional process representations.
-This repository is dedicated to our proposed approach, wich enables us
-to encode both the structural information of Process models, in Petri
-Net format, and the individual tasks into compact vector
-representations, facilitating various downstream tasks such as
-similarity analysis and process mining.
+Embedding vectors serve as numerical representations within a continuous vector space, widely employed in machine learning tasks for capturing semantic relationships between entities. In the context of process mining, embeddings offer a robust approach to representing complex process structures and relationships within process models.
+
+This repository is dedicated to introducing our proposed method, which aims to encode both the structural information of process models in Petri Net format and individual tasks into concise vector representations. Our approach draws inspiration from the strengths of both doc2vec and graph2vec techniques.
+
+The significance of these embeddings lies in their ability to facilitate various downstream tasks, including similarity analysis and process classification. These capabilities enable sophisticated analyses that were previously challenging to achieve with traditional process representations. Join us as we explore the realm of process mining with the aid of embeddings.
 
 ### Dependecies (recomended order):
 
