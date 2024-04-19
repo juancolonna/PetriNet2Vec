@@ -22,7 +22,9 @@ The significance of these embeddings lies in their ability to facilitate various
 
 -   `sudo apt-get install graphviz`
 
--   `pip install -i https://test.pypi.org/simple/ PetriNet2Vec`
+### Installation:
+
+-   `pip install PetriNet2Vec`
 
 ## How to use PetriNet2Vec
 ``` python
